@@ -355,7 +355,7 @@ table.rec tr.me td{color:#ffe36b}
   // 盤面が広いほど育成・昇進・合体を沢山味わえる（3×5は片鱗、5×5でそこそこ合体、7×5以上は必ず何か起きる）
   const BONUS_CELL = { ...LOWS_W, 4: 5, 3: 1, 2: 0.15, 1: 0.01, 8: 1.55 };
   const BONUS_CLUSTER = {
-    p: 0.02,                                         // 1マスあたり塊の起点になる確率（全盤面共通）
+    p: 0.025,                                         // 1マスあたり塊の起点になる確率（全盤面共通）
     shapes: [[2, 2, 5], [2, 1, 3], [1, 2, 2], [3, 2, 1], [2, 3, 1]],   // [横, 縦, 重み]
     ranks: [[4, 80], [3, 17], [2, 3]],                // 係長・課長・部長
   };
@@ -375,11 +375,11 @@ table.rec tr.me td{color:#ffe36b}
   // ---- 肩書き別・最終配当抽選（仕様書どおり。社長・アムロックの刻みは仮） ----
   // jp: [JPindex, 確率] を上位から判定し、当たった1つを通常配当に加算
   const TITLE_PAY = {
-    4: { min: 50,    max: 140,   step: 10,   jp: [[0, 0.004]] },
-    3: { min: 140,   max: 360,   step: 10,   jp: [[1, 0.002], [0, 0.032]] },
-    2: { min: 650,   max: 1450,  step: 50,   jp: [[3, 0.0004], [2, 0.002], [1, 0.02]] },
-    1: { min: 2400,  max: 5200,  step: 100,  jp: [[4, 0.0002], [3, 0.004], [2, 0.02]] },
-    0: { min: 12000, max: 24000, step: 1000, jp: [[4, 0.008]] },
+    4: { min: 100,   max: 350,   step: 50,   jp: [[0, 0.01]] },
+    3: { min: 350,   max: 900,   step: 50,   jp: [[1, 0.005], [0, 0.08]] },
+    2: { min: 1600,  max: 3500,  step: 100,  jp: [[3, 0.001], [2, 0.005], [1, 0.05]] },
+    1: { min: 6000,  max: 13000, step: 500,  jp: [[4, 0.0005], [3, 0.01], [2, 0.05]] },
+    0: { min: 30000, max: 60000, step: 5000, jp: [[4, 0.02]] },
   };
   const LEVELS = { NORMAL: { rows: 3, name: '通常ゲーム' } };
 
@@ -404,6 +404,8 @@ table.rec tr.me td{color:#ffe36b}
   // strip is stable, with doors kept apart so one reel never shows two doors.
   function mulberry(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
+  const NORMAL_LOW_STACK = 1;
+  const NORMAL_TITLE_STACK = 1;   // 役職の塊（1=塊なし）
   function buildStrip(weights, seed, spread) {
     const rnd = mulberry(seed);
     // symbols come in short stacks (1–3 high) so ways wins can multiply
@@ -411,7 +413,7 @@ table.rec tr.me td{color:#ffe36b}
     for (const [id, n] of Object.entries(weights)) {
       let left = n;
       while (left > 0) {
-        const size = (spread.includes(+id) || !CHAR_IDS.includes(+id)) ? 1 : Math.min(left, 1 + Math.floor(rnd() * 3));
+        const size = spread.includes(+id) ? 1 : !CHAR_IDS.includes(+id) ? Math.min(left, 1 + Math.floor(rnd() * NORMAL_LOW_STACK)) : Math.min(left, 1 + Math.floor(rnd() * NORMAL_TITLE_STACK));
         blocks.push(Array(size).fill(+id)); left -= size;
       }
     }
@@ -440,11 +442,11 @@ table.rec tr.me td{color:#ffe36b}
   const W = (o) => o;
   // 通常ゲーム (3×5). 肩書きは係長・課長・部長のみ（社長・アムロックは出世ゲームでのみ登場）
   const NORMAL_W = [
-    W({ 0: 0, 1: 0, 2: 12, 3: 18, 4: 24, 5: 9, 6: 0, 7: 0, 15: 18, 16: 16, 17: 15, 18: 14, 19: 22, 20: 20, 21: 20, 22: 22 }),
-    W({ 0: 0, 1: 0, 2: 12, 3: 18, 4: 24, 5: 9, 6: 1, 7: 0, 15: 18, 16: 16, 17: 15, 18: 14, 19: 22, 20: 20, 21: 20, 22: 22 }),
-    W({ 0: 0, 1: 0, 2: 24, 3: 36, 4: 48, 5: 22, 6: 0, 7: 1, 15: 36, 16: 32, 17: 30, 18: 28, 19: 44, 20: 40, 21: 40, 22: 44 }),
-    W({ 0: 0, 1: 0, 2: 12, 3: 18, 4: 24, 5: 9, 6: 1, 7: 0, 15: 18, 16: 16, 17: 15, 18: 14, 19: 22, 20: 20, 21: 20, 22: 22 }),
-    W({ 0: 0, 1: 0, 2: 12, 3: 18, 4: 24, 5: 9, 6: 0, 7: 0, 15: 18, 16: 16, 17: 15, 18: 14, 19: 22, 20: 20, 21: 20, 22: 22 }),
+    W({ 0: 0, 1: 0, 2: 12, 3: 22, 4: 36, 5: 10, 6: 0, 7: 0, 15: 18, 16: 16, 17: 15, 18: 14, 19: 22, 20: 20, 21: 20, 22: 22 }),
+    W({ 0: 0, 1: 0, 2: 12, 3: 22, 4: 36, 5: 10, 6: 1, 7: 0, 15: 18, 16: 16, 17: 15, 18: 14, 19: 22, 20: 20, 21: 20, 22: 22 }),
+    W({ 0: 0, 1: 0, 2: 24, 3: 44, 4: 72, 5: 26, 6: 0, 7: 1, 15: 36, 16: 32, 17: 30, 18: 28, 19: 44, 20: 40, 21: 40, 22: 44 }),
+    W({ 0: 0, 1: 0, 2: 12, 3: 22, 4: 36, 5: 10, 6: 1, 7: 0, 15: 18, 16: 16, 17: 15, 18: 14, 19: 22, 20: 20, 21: 20, 22: 22 }),
+    W({ 0: 0, 1: 0, 2: 12, 3: 22, 4: 36, 5: 10, 6: 0, 7: 0, 15: 18, 16: 16, 17: 15, 18: 14, 19: 22, 20: 20, 21: 20, 22: 22 }),
   ];
   const STRIPS = {
     NORMAL: NORMAL_W.map((w, r) => buildStrip(w, 1000 + r * 17, [5, 6, 7])),
@@ -520,13 +522,13 @@ table.rec tr.me td{color:#ffe36b}
     return ids[pickWeighted(ids.map(i => w[i]), rnd)];
   }
   // ---- 出世ゲームの専用リール（全盤面共通・5本）----
-  // ・昇進は2〜3個つながって並ぶ（出たら一気に育つ）
+  // ・昇進は2〜3個つながって並ぶ（出たら一気に育つ）。昇進が載っているのは2〜4列目だけ
   // ・係長は1〜3個の縦並びで点在、課長はまばら
   // ・ハズレ絵柄はばらけさせ、2列目はトランプ寄り／3列目は事務用品寄り＝噛み合わず揃いにくい
   const BONUS_REEL_CFG = {
     L: 60,
-    promoRuns: 1, promoLen: [[2, 6], [3, 4]],
-    kakariRuns: 3, kakariLen: [[1, 3], [2, 4], [3, 2]],
+    promoRuns: [0, 1, 1, 1, 0], promoLen: [[2, 6], [3, 4]],
+    kakariRuns: 4, kakariLen: [[1, 3], [2, 4], [3, 2]],
     kacho: 1,
     lows: [
       { 15: 1, 16: 1, 17: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 1 },
@@ -544,7 +546,8 @@ table.rec tr.me td{color:#ffe36b}
     return [0, 1, 2, 3, 4].map(x => {
       const L = cfg.L, a = Array(L).fill(null);
       const runs = [];
-      for (let i = 0; i < cfg.promoRuns; i++) runs.push([PROMOTE, pickW(cfg.promoLen)]);
+      const pr = Array.isArray(cfg.promoRuns) ? cfg.promoRuns[x] : cfg.promoRuns;
+      for (let i = 0; i < pr; i++) runs.push([PROMOTE, pickW(cfg.promoLen)]);
       for (let i = 0; i < cfg.kakariRuns; i++) runs.push([4, pickW(cfg.kakariLen)]);
       for (let i = 0; i < cfg.kacho; i++) runs.push([3, 1]);
       // 等間隔＋ゆらぎで配置（塊どうしはくっつけない）

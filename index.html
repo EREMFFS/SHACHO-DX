@@ -328,8 +328,8 @@ table.rec tr.me td{color:#ffe36b}
   const CHAR_IDS = [0, 1, 2, 3, 4];          // 肩書シンボル
   const LOW_IDS = [15, 16, 17, 18, 19, 20, 21, 22];
   const PROMOTE = 8;
-  // 出世ゲーム中の役職の役（1WAYあたり 3/4/5連）。盤面が広いほどWAYS数が増える＝3×5はあと一歩、5×5で当たる、7×5で勝ち確
-  const BONUS_TITLE_WAYS_PAY = { 1: [3000, 6000, 9000], 2: [600, 1600, 2200], 3: [250, 700, 800], 4: [150, 380, 450] };
+  // 出世ゲーム中の役職の役（1WAYあたり 3/4/5連）。リールでの当たりはおまけ程度（主役は封筒）
+  const BONUS_TITLE_WAYS_PAY = { 1: [600, 1200, 1800], 2: [120, 320, 440], 3: [50, 140, 160], 4: [30, 80, 90] };
 
   const BET = 1000;
   const START_GIL = 50000;
@@ -375,11 +375,11 @@ table.rec tr.me td{color:#ffe36b}
   // ---- 肩書き別・最終配当抽選（仕様書どおり。社長・アムロックの刻みは仮） ----
   // jp: [JPindex, 確率] を上位から判定し、当たった1つを通常配当に加算
   const TITLE_PAY = {
-    4: { min: 80,    max: 260,   step: 20,   jp: [[0, 0.004]] },
-    3: { min: 260,   max: 680,   step: 20,   jp: [[1, 0.002], [0, 0.032]] },
-    2: { min: 1200,  max: 2600,  step: 100,  jp: [[3, 0.0004], [2, 0.002], [1, 0.02]] },
-    1: { min: 4500,  max: 9500,  step: 500,  jp: [[4, 0.0002], [3, 0.004], [2, 0.02]] },
-    0: { min: 22500, max: 45000, step: 2500, jp: [[4, 0.008]] },
+    4: { min: 40,    max: 120,   step: 10,   jp: [[0, 0.004]] },
+    3: { min: 120,   max: 300,   step: 10,   jp: [[1, 0.002], [0, 0.032]] },
+    2: { min: 550,   max: 1200,  step: 50,   jp: [[3, 0.0004], [2, 0.002], [1, 0.02]] },
+    1: { min: 2000,  max: 4300,  step: 100,  jp: [[4, 0.0002], [3, 0.004], [2, 0.02]] },
+    0: { min: 10000, max: 20000, step: 1000, jp: [[4, 0.008]] },
   };
   const LEVELS = { NORMAL: { rows: 3, name: '通常ゲーム' } };
 
@@ -519,6 +519,61 @@ table.rec tr.me td{color:#ffe36b}
     const w = BONUS[type].cell, ids = Object.keys(w).map(Number);
     return ids[pickWeighted(ids.map(i => w[i]), rnd)];
   }
+  // ---- 出世ゲームの専用リール（全盤面共通・5本）----
+  // ・昇進は2〜3個つながって並ぶ（出たら一気に育つ）
+  // ・係長は1〜3個の縦並びで点在、課長はまばら
+  // ・ハズレ絵柄はばらけさせ、2列目はトランプ寄り／3列目は事務用品寄り＝噛み合わず揃いにくい
+  const BONUS_REEL_CFG = {
+    L: 60,
+    promoRuns: 1, promoLen: [[2, 6], [3, 4]],
+    kakariRuns: 3, kakariLen: [[1, 3], [2, 4], [3, 2]],
+    kacho: 1,
+    lows: [
+      { 15: 1, 16: 1, 17: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 1 },
+      { 15: 0.15, 16: 0.15, 17: 0.15, 18: 0.15, 19: 1, 20: 1, 21: 1, 22: 1 },
+      { 15: 1, 16: 1, 17: 1, 18: 1, 19: 0.15, 20: 0.15, 21: 0.15, 22: 0.15 },
+      { 15: 1, 16: 1, 17: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 1 },
+      { 15: 1, 16: 1, 17: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 1 },
+    ],
+    rare: { 2: 0.002, 1: 0.00012 },   // 部長・社長はリールに無く、ごくまれに差し込まれる
+  };
+  function buildBonusStrips(cfg) {
+    let seed = 20261001;
+    const r = () => { seed = (seed + 0x6D2B79F5) | 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const pickW = (pairs) => pairs[pickWeighted(pairs.map(q => q[1]), r)][0];
+    return [0, 1, 2, 3, 4].map(x => {
+      const L = cfg.L, a = Array(L).fill(null);
+      const runs = [];
+      for (let i = 0; i < cfg.promoRuns; i++) runs.push([PROMOTE, pickW(cfg.promoLen)]);
+      for (let i = 0; i < cfg.kakariRuns; i++) runs.push([4, pickW(cfg.kakariLen)]);
+      for (let i = 0; i < cfg.kacho; i++) runs.push([3, 1]);
+      // 等間隔＋ゆらぎで配置（塊どうしはくっつけない）
+      const gap = L / runs.length;
+      runs.sort(() => r() - 0.5).forEach(([sym, len], i) => {
+        let at = Math.floor(i * gap + r() * Math.max(1, gap - len - 1));
+        for (let k = 0; k < len; k++) a[(at + k) % L] = sym;
+      });
+      const lw = cfg.lows[x], ids = Object.keys(lw).map(Number);
+      for (let i = 0; i < L; i++) if (a[i] === null) {
+        let s, guard = 0;
+        do { s = ids[pickWeighted(ids.map(id => lw[id]), r)]; } while (guard++ < 20 && (a[(i + L - 1) % L] === s || a[(i + 1) % L] === s));
+        a[i] = s;
+      }
+      return a;
+    });
+  }
+  let BONUS_STRIPS = buildBonusStrips(BONUS_REEL_CFG);
+  function setBonusReel(cfg) { Object.assign(BONUS_REEL_CFG, cfg); BONUS_STRIPS = buildBonusStrips(BONUS_REEL_CFG); api.BONUS_STRIPS = BONUS_STRIPS; }
+  function drawBonusGrid(rows, rnd) {
+    return BONUS_STRIPS.map(strip => {
+      const L = strip.length, o = Math.floor(rnd() * L);
+      return Array.from({ length: rows }, (_, y) => {
+        let s = strip[(o + y) % L];
+        if (LOW_IDS.includes(s)) for (const [id, p] of Object.entries(BONUS_REEL_CFG.rare)) if (rnd() < p) { s = +id; break; }
+        return s;
+      });
+    });
+  }
   function newBonus(type, carryGrid) {
     const B = BONUS[type];
     const st = { type, rows: B.rows, maxRank: B.maxRank, games: B.games, units: [], nextId: 1, spins: 0 };
@@ -536,6 +591,10 @@ table.rec tr.me td{color:#ffe36b}
     return m;
   }
   // 正方形合体：肩書きが高い候補 → 大きい正方形 → 下・左 を優先
+  // 合体ルール：near=0 なら同じ肩書きのみ。near=1 なら1段違いまで合体でき、一番上の肩書きになる
+  const MERGE = { near: 1 };
+  // 役職の役：withFixed=true なら固定済みの役職もつながりに使う。false なら今回止まった役職だけで判定（通常の役と同じ）
+  const TITLE_WAYS = { withFixed: true };
   function findMerge(st) {
     const m = cellMap(st);
     let best = null;
@@ -545,7 +604,7 @@ table.rec tr.me td{color:#ffe36b}
         for (let dx = 0; dx < k && ok; dx++) for (let dy = 0; dy < k && ok; dy++) {
           const u = m[x0 + dx][y0 + dy];
           if (!u) { ok = false; break; }
-          if (rank === null) rank = u.rank; else if (u.rank !== rank) ok = false;
+          if (rank === null) rank = u.rank; else if (MERGE.near ? Math.abs(u.rank - rank) > MERGE.near : u.rank !== rank) ok = false; else if (MERGE.near) rank = Math.min(rank, u.rank);
           inside.add(u);
         }
         if (!ok || inside.size < 2) continue;
@@ -577,7 +636,7 @@ table.rec tr.me td{color:#ffe36b}
   function bonusSpin(st, rnd) {
     rnd = rnd || Math.random;
     st.spins++;
-    const draw = Array.from({ length: 5 }, () => Array.from({ length: st.rows }, () => drawCell(st.type, rnd)));
+    const draw = drawBonusGrid(st.rows, rnd);
     // 最終ゲームまで昇進が一度も無ければ1枚保証（どの盤面でも最低1回は昇進を見せる）
     if (st.games === 1 && !st.promoted && st.units.length) {
       draw[Math.floor(rnd() * 5)][Math.floor(rnd() * st.rows)] = PROMOTE;
@@ -637,12 +696,15 @@ table.rec tr.me td{color:#ffe36b}
     const newSet = new Set(ev.fixed.map(u => u.x + ',' + u.y));
     const wins = [];
     for (const id of [1, 2, 3, 4]) {
-      let n = 0; while (n < 5 && fm[n].some(u => u && u.rank === id)) n++;
+      const has = (x, y) => { const u = fm[x][y]; return u && u.rank === id && (TITLE_WAYS.withFixed || newSet.has(x + ',' + y)); };
+      let n = 0; while (n < 5 && fm[n].some((u, y) => has(n, y))) n++;
       if (n < 3) { if (n === 2 && ev.fixed.some(u => u.rank === id && u.x < 2)) ev.reach = id; continue; }
       let all = 1, old = 1;
       for (let x = 0; x < n; x++) {
         let a = 0, o = 0;
-        for (let y = 0; y < st.rows; y++) { const u = fm[x][y]; if (u && u.rank === id) { a++; if (!newSet.has(x + ',' + y)) o++; } }
+        // 合体した役職は大きな1枚の絵柄として、1列につき1つと数える
+        const seen = new Set();
+        for (let y = 0; y < st.rows; y++) if (has(x, y)) { const u = fm[x][y]; if (seen.has(u)) continue; seen.add(u); a++; if (!newSet.has(x + ',' + y)) o++; }
         all *= a; old *= o;
       }
       const ways = all - old;
@@ -678,7 +740,7 @@ table.rec tr.me td{color:#ffe36b}
   }
 
   const api = { GOAL_GIL, SYM, CHAR_IDS, LOW_IDS, PROMOTE, BLANK, BET, START_GIL, BILL, JP, BONUS, TITLE_PAY, LEVELS, WHEELS, STRIPS,
-    spin, evalNormal, spinWheel, pickWeighted, countDoors, drawCell, newBonus, bonusSpin, bonusPayout, cellMap };
+    spin, evalNormal, spinWheel, pickWeighted, countDoors, drawCell, setBonusReel, BONUS_STRIPS, BONUS_REEL_CFG, MERGE, TITLE_WAYS, BONUS_CLUSTER, BONUS_TITLE_WAYS_PAY, BONUS_LOW_PAY, newBonus, bonusSpin, bonusPayout, cellMap };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.ENGINE = api;
 })(this);
 </script>
@@ -2030,7 +2092,7 @@ async function animateRows(to, ms) {
 
 // 出世ゲーム用の見た目のリール（止まる位置に抽選結果を書き込む）
 function makeBonusStrips(type) {
-  return [0, 1, 2, 3, 4].map(() => Array.from({ length: 48 }, () => E.drawCell(type)));
+  return E.BONUS_STRIPS.map(st => st.slice());   // 出世ゲーム専用リール（表示用のコピー）
 }
 function writeBonusStops(draw) {
   const stops = [];
